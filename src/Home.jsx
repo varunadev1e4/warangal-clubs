@@ -222,6 +222,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('All')
+  const [query, setQuery] = useState('')
+  const [clubCat, setClubCat] = useState('All')
 
   useEffect(() => {
     async function load() {
@@ -244,6 +246,25 @@ export default function Home() {
     })
     return [...seen.entries()]
   }, [events])
+
+  // Club categories for the filter chips (case-insensitive, so "books" and "Books" are one chip).
+  const clubCats = useMemo(() => {
+    const seen = new Map()
+    clubs.forEach(c => {
+      const name = (c.category || '').trim()
+      const key = name.toLowerCase()
+      if (name && !seen.has(key)) seen.set(key, name)
+    })
+    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  }, [clubs])
+
+  const q = query.trim().toLowerCase()
+  const shownClubs = clubs.filter(c => {
+    if (clubCat !== 'All' && (c.category || '').trim().toLowerCase() !== clubCat) return false
+    if (!q) return true
+    return [c.name, c.category, c.description].some(t => (t || '').toLowerCase().includes(q))
+  })
+  const clearClubFilters = () => { setQuery(''); setClubCat('All') }
 
   const shown = filter === 'All' ? events : events.filter(e => categoryOf(e) === filter)
   const [next, ...rest] = shown
@@ -323,7 +344,66 @@ export default function Home() {
       <section>
         <h2 className="section-title display">Clubs in town</h2>
         {!loading && clubs.length === 0 && <p className="muted">No clubs listed yet.</p>}
-        {clubs.map(c => (
+
+        {clubs.length > 1 && (
+          <div className="finder">
+            <div className="finder__box">
+              <svg className="finder__icon" viewBox="0 0 20 20" aria-hidden="true" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="8.5" cy="8.5" r="5.5" /><path d="M13 13l4.5 4.5" />
+              </svg>
+              <input
+                type="search"
+                aria-label="Search clubs"
+                placeholder="Search clubs by name or topic"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                autoComplete="off"
+              />
+              {query && (
+                <button type="button" className="finder__clear" aria-label="Clear search"
+                  onClick={() => setQuery('')}>
+                  ×
+                </button>
+              )}
+            </div>
+
+            {clubCats.length > 1 && (
+              <div className="chips" role="group" aria-label="Filter clubs by category">
+                <button className="chip" style={{ '--c': '#1C2A2D' }}
+                  aria-pressed={clubCat === 'All'} onClick={() => setClubCat('All')}>
+                  All
+                </button>
+                {clubCats.map(([key, name]) => (
+                  <button key={key} className="chip chip--dot" style={{ '--c': categoryColor(name) }}
+                    aria-pressed={clubCat === key} onClick={() => setClubCat(key)}>
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {(q || clubCat !== 'All') && (
+              <p className="finder__count" role="status">
+                Showing {shownClubs.length} of {clubs.length} clubs
+              </p>
+            )}
+          </div>
+        )}
+
+        {clubs.length > 0 && shownClubs.length === 0 && (
+          <div className="noresults">
+            <p>
+              No clubs match
+              {q ? ` "${query.trim()}"` : ''}
+              {clubCat !== 'All' ? ` in ${clubCats.find(([k]) => k === clubCat)?.[1] || 'this category'}` : ''}.
+              Try a different word or category.
+            </p>
+            <button className="btn btn--ghost" onClick={clearClubFilters}>Clear search and filters</button>
+          </div>
+        )}
+
+        {shownClubs.map(c => (
           <ClubRow key={c.id} c={c} />
         ))}
       </section>

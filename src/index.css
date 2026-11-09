@@ -161,6 +161,29 @@ code { background: #d9ded7; padding: 1px 6px; border-radius: 4px; font-size: 0.9
 .club__desc { margin-top: 8px; max-width: 58ch; }
 .club__links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 
+/* ---------- Club search and filter ---------- */
+.finder { margin: 4px 0 8px; display: grid; gap: 12px; }
+.finder__box { position: relative; }
+.finder__box input {
+  padding-left: 40px; padding-right: 40px; min-height: 46px;
+}
+/* hide the browser's built-in clear (x) so only ours shows */
+.finder__box input[type='search']::-webkit-search-cancel-button,
+.finder__box input[type='search']::-webkit-search-decoration { -webkit-appearance: none; appearance: none; display: none; }
+.finder__icon {
+  position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+  width: 18px; height: 18px; color: var(--ink-soft); pointer-events: none;
+}
+.finder__clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px; border: 0; background: transparent; color: var(--ink);
+  font-size: 1.4rem; line-height: 1; cursor: pointer; border-radius: 6px;
+}
+.finder__clear:hover { background: #dce1d9; }
+.finder .chips { margin: 0; }
+.finder__count { color: var(--ink-soft); font-size: 0.95rem; }
+.noresults { padding: 20px 0; display: grid; gap: 12px; justify-items: start; }
+
 /* ---------- Buttons ---------- */
 .btn, .linkbtn {
   font: inherit; font-weight: 700; text-decoration: none; cursor: pointer;
