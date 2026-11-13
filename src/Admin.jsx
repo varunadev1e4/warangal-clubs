@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabase'
 import * as db from './db'
 import Header from './Header'
 import { longDate, timeStr } from './format'
 import { categoryColor, initials } from './theme'
 
-const emptyEvent = { title: '', description: '', location: '', starts_at: '', club_id: '', link: '' }
+// poster_url = the saved poster; poster_blob = a newly chosen (already shrunk) image not yet uploaded
+const emptyEvent = {
+  title: '', description: '', location: '', starts_at: '', club_id: '', link: '',
+  poster_url: '', poster_blob: null,
+}
 const emptyClub = {
   name: '', category: '', description: '', instagram_url: '', facebook_url: '', whatsapp_url: '',
   links: [],
@@ -105,6 +109,8 @@ function Dashboard({ session, demo }) {
   const [editClubId, setEditClubId] = useState(null)
   const [messages, setMessages] = useState([])
   const [messagesError, setMessagesError] = useState('')
+  const [clickStats, setClickStats] = useState({})
+  const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
 
   const say = (text, kind = 'ok') => setToast({ text, kind })
@@ -124,6 +130,9 @@ function Dashboard({ session, demo }) {
     const m = await db.listMessages()
     if (m.error) setMessagesError(m.error.message)
     else { setMessagesError(''); setMessages(m.data || []) }
+    // Also loaded on its own: click counts are optional and need the newer SQL.
+    const s = await db.listClickStats()
+    if (!s.error) setClickStats(s.data || {})
   }
   useEffect(() => { load() }, [])
 
@@ -132,22 +141,84 @@ function Dashboard({ session, demo }) {
   /* ----- events ----- */
   const setE = k => e => setEventForm({ ...eventForm, [k]: e.target.value })
 
+  // Preview of the poster: the newly chosen image if there is one, otherwise the saved one.
+  const posterSrc = useMemo(
+    () => (eventForm.poster_blob ? URL.createObjectURL(eventForm.poster_blob) : eventForm.poster_url),
+    [eventForm.poster_blob, eventForm.poster_url]
+  )
+  useEffect(() => () => { if (eventForm.poster_blob && posterSrc) URL.revokeObjectURL(posterSrc) }, [posterSrc])
+
+  const pickPoster = async e => {
+    const file = e.target.files && e.target.files[0]
+    e.target.value = '' // lets you pick the same file again later
+    if (!file) return
+    if (!/^image\//.test(file.type)) return say('Choose an image file (JPG, PNG or WebP).', 'error')
+    try {
+      const blob = await db.compressImage(file)
+      setEventForm(f => ({ ...f, poster_blob: blob }))
+    } catch (err) {
+      say(err.message || "That image couldn't be read. Try a JPG or PNG.", 'error')
+    }
+  }
+  const removePosterFromForm = () => setEventForm(f => ({ ...f, poster_blob: null, poster_url: '' }))
+
   const saveEvent = async e => {
     e.preventDefault()
-    const payload = {
-      title: eventForm.title.trim(),
-      description: clean(eventForm.description),
-      location: clean(eventForm.location),
-      link: clean(eventForm.link),
-      starts_at: new Date(eventForm.starts_at).toISOString(),
-      club_id: eventForm.club_id || null,
+    if (saving) return
+    setSaving(true)
+    try {
+      const editing = events.find(x => x.id === editEventId)
+      const oldPoster = editing ? editing.poster_url || null : null
+
+      // 1. upload a newly chosen poster
+      let posterUrl = eventForm.poster_url || null
+      let uploaded = null
+      if (eventForm.poster_blob) {
+        const up = await db.uploadPoster(eventForm.poster_blob)
+        if (up.error) {
+          return say(
+            `Couldn't upload the poster: ${up.error.message}. If you haven't yet, run supabase/upgrade-posters-and-clicks.sql in the Supabase SQL Editor.`,
+            'error'
+          )
+        }
+        uploaded = posterUrl = up.url
+      }
+
+      // 2. save the event
+      const payload = {
+        title: eventForm.title.trim(),
+        description: clean(eventForm.description),
+        location: clean(eventForm.location),
+        link: clean(eventForm.link),
+        starts_at: new Date(eventForm.starts_at).toISOString(),
+        club_id: eventForm.club_id || null,
+      }
+      // Only send poster_url when it matters, so saving still works before the new SQL has been run.
+      if (posterUrl || (editing && 'poster_url' in editing)) payload.poster_url = posterUrl
+
+      const { error } = await db.saveEvent(payload, editEventId)
+      if (error) {
+        if (uploaded) db.removePoster(uploaded) // don't leave an unused file behind
+        return say(
+          /poster_url/.test(error.message)
+            ? 'To save posters, run supabase/upgrade-posters-and-clicks.sql once in the Supabase SQL Editor, then try again.'
+            : error.message,
+          'error'
+        )
+      }
+
+      // 3. tidy up the replaced or removed poster, unless another event still uses that same file
+      if (oldPoster && oldPoster !== posterUrl && !events.some(x => x.id !== editEventId && x.poster_url === oldPoster)) {
+        db.removePoster(oldPoster)
+      }
+
+      say(editEventId ? 'Saved.' : 'Published.')
+      setEventForm(emptyEvent)
+      setEditEventId(null)
+      load()
+    } finally {
+      setSaving(false)
     }
-    const { error } = await db.saveEvent(payload, editEventId)
-    if (error) return say(error.message, 'error')
-    say(editEventId ? 'Saved.' : 'Published.')
-    setEventForm(emptyEvent)
-    setEditEventId(null)
-    load()
   }
 
   const eventFields = ev => ({
@@ -156,6 +227,8 @@ function Dashboard({ session, demo }) {
     location: ev.location || '',
     link: ev.link || '',
     club_id: ev.club_id || '',
+    poster_url: ev.poster_url || '',
+    poster_blob: null,
   })
 
   const editEvent = ev => {
@@ -176,6 +249,10 @@ function Dashboard({ session, demo }) {
     if (!window.confirm(`Delete "${ev.title}"? This can't be undone.`)) return
     const { error } = await db.deleteEvent(ev.id)
     if (error) return say(error.message, 'error')
+    // remove its poster file too, unless another event (e.g. a duplicate) still uses it
+    if (ev.poster_url && !events.some(x => x.id !== ev.id && x.poster_url === ev.poster_url)) {
+      db.removePoster(ev.poster_url)
+    }
     if (editEventId === ev.id) { setEditEventId(null); setEventForm(emptyEvent) }
     say('Deleted.')
     load()
@@ -269,10 +346,13 @@ function Dashboard({ session, demo }) {
 
   const eventRow = (ev, isPast) => (
     <div key={ev.id} className={'admin-row' + (isPast ? ' is-past' : '')}>
-      <div className="admin-row__main">
-        <b className="admin-row__title">{ev.title}</b>
-        <span className="muted">{longDate(ev.starts_at)}, {timeStr(ev.starts_at)}</span>
-        <span className="muted">{ev.clubs ? ev.clubs.name : 'City event'}</span>
+      <div className="admin-row__id">
+        {ev.poster_url && <img className="admin-thumb" src={ev.poster_url} alt="" loading="lazy" />}
+        <div className="admin-row__main">
+          <b className="admin-row__title">{ev.title}</b>
+          <span className="muted">{longDate(ev.starts_at)}, {timeStr(ev.starts_at)}</span>
+          <span className="muted">{ev.clubs ? ev.clubs.name : 'City event'}</span>
+        </div>
       </div>
       <div className="admin-row__actions">
         <button className="btn btn--small btn--ghost" onClick={() => editEvent(ev)}>Edit</button>
@@ -317,6 +397,12 @@ function Dashboard({ session, demo }) {
             <b className="admin-row__title">{c.name}</b>
             <span className="muted">{c.category || 'No category'}</span>
             <span className="muted">{n} event{n === 1 ? '' : 's'}</span>
+            {clickStats[c.id] && (
+              <span className="muted">
+                {clickStats[c.id].last30} link click{clickStats[c.id].last30 === 1 ? '' : 's'} in the last 30 days
+                {' '}({clickStats[c.id].total} in total)
+              </span>
+            )}
           </div>
         </div>
         <div className="admin-row__actions">
@@ -398,9 +484,32 @@ function Dashboard({ session, demo }) {
                 <label htmlFor="desc">Description</label>
                 <textarea id="desc" rows={4} value={eventForm.description} onChange={setE('description')} />
               </div>
+              <div className="field span-2">
+                <span className="label">Poster (optional)</span>
+                <div className="poster-pick">
+                  {posterSrc && <img className="poster-pick__img" src={posterSrc} alt="Poster preview" />}
+                  <div className="poster-pick__actions">
+                    <label className="btn btn--small btn--ghost filebtn">
+                      <input type="file" accept="image/jpeg,image/png,image/webp" onChange={pickPoster}
+                        className="sr-only" aria-label="Choose poster image" />
+                      {posterSrc ? 'Change poster' : 'Choose poster image'}
+                    </label>
+                    {posterSrc && (
+                      <button type="button" className="btn btn--small btn--danger" onClick={removePosterFromForm}>
+                        Remove poster
+                      </button>
+                    )}
+                    <span className="muted poster-pick__hint">
+                      JPG, PNG or WebP. Large photos are shrunk automatically.
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="form-actions">
-              <button className="btn">{editEventId ? 'Save changes' : 'Publish event'}</button>
+              <button className="btn" disabled={saving}>
+                {saving ? 'Saving…' : editEventId ? 'Save changes' : 'Publish event'}
+              </button>
               {editEventId && (
                 <button type="button" className="btn btn--ghost"
                   onClick={() => { setEditEventId(null); setEventForm(emptyEvent) }}>

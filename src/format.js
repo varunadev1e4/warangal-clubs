@@ -13,6 +13,9 @@ export const dayNum = d => new Date(d).toLocaleDateString('en-IN', { timeZone: T
 export const weekday = d =>
   new Date(d).toLocaleDateString('en-IN', { timeZone: TZ, weekday: 'short' })
 
+export const weekdayLong = d =>
+  new Date(d).toLocaleDateString('en-IN', { timeZone: TZ, weekday: 'long' })
+
 export const monthYear = d =>
   new Date(d).toLocaleDateString('en-IN', { timeZone: TZ, month: 'long', year: 'numeric' })
 

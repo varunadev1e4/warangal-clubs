@@ -104,7 +104,16 @@ code { background: #d9ded7; padding: 1px 6px; border-radius: 4px; font-size: 0.9
   min-height: 300px;
   animation: rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
 }
-.gate__inner { animation: fade-in 0.5s ease 0.55s backwards; max-width: 60ch; }
+.gate__inner { animation: fade-in 0.5s ease 0.55s backwards; }
+.gate__text { max-width: 60ch; }
+.gate__content { display: grid; gap: 22px; }
+.gate__poster { display: block; justify-self: start; border: 3px solid var(--ink); background: var(--paper); }
+.gate__poster img { display: block; width: 100%; max-width: 300px; max-height: 380px; height: auto; object-fit: contain; }
+@media (min-width: 720px) {
+  .gate__content.has-poster { grid-template-columns: minmax(0, 1fr) 260px; align-items: start; gap: 32px; }
+  .gate__poster { justify-self: end; }
+  .gate__poster img { max-width: 100%; }
+}
 
 .gate__when { font-weight: 700; font-size: 1.05rem; }
 .gate__title { font-size: clamp(1.55rem, 5.2vw, 2.6rem); margin: 8px 0 12px; }
@@ -182,7 +191,66 @@ code { background: #d9ded7; padding: 1px 6px; border-radius: 4px; font-size: 0.9
 .finder__clear:hover { background: #dce1d9; }
 .finder .chips { margin: 0; }
 .finder__count { color: var(--ink-soft); font-size: 0.95rem; }
+.finder--events { margin-bottom: 16px; }
 .noresults { padding: 20px 0; display: grid; gap: 12px; justify-items: start; }
+
+/* keep the line breaks you type in descriptions */
+.gate__desc, .event__desc, .club__desc { white-space: pre-line; }
+
+/* ---------- Event posters ---------- */
+.event__poster { display: inline-block; margin-top: 12px; border: 1.5px solid var(--ink); background: var(--paper); }
+.event__poster img { display: block; max-width: min(100%, 280px); max-height: 240px; width: auto; height: auto; }
+
+/* ---------- Add to calendar ---------- */
+.cal { position: relative; display: inline-block; }
+.cal__toggle { font: inherit; font-weight: 600; text-decoration: underline; background: none; border: 0; padding: 0; cursor: pointer; }
+.cal__menu {
+  position: absolute; z-index: 20; top: calc(100% + 6px); left: 0;
+  width: max-content; max-width: calc(100vw - 32px);
+  display: grid; background: var(--paper); border: 1.5px solid var(--ink);
+  box-shadow: 0 6px 20px rgba(28, 42, 45, 0.2);
+}
+.cal__menu--right { left: auto; right: 0; }
+.cal__menu a { padding: 11px 16px; color: var(--ink); font-weight: 600; text-decoration: none; }
+.cal__menu a + a { border-top: 1px solid var(--line); }
+.cal__menu a:hover { background: #dce1d9; }
+
+/* ---------- Admin: poster picker and thumbnails ---------- */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.field .label { font-weight: 600; font-size: 0.95rem; }
+.poster-pick { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px; }
+.poster-pick__img { max-width: 140px; max-height: 190px; border: 1.5px solid var(--ink); background: #fff; }
+.poster-pick__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.poster-pick__hint { font-size: 0.9rem; flex-basis: 100%; }
+.field .filebtn { font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+.filebtn:focus-within { outline: 3px solid var(--focus); outline-offset: 3px; }
+.admin-thumb { width: 48px; height: 48px; object-fit: cover; border: 1.5px solid var(--ink); flex: none; background: #fff; }
+
+/* ---------- Share ticket dialog ---------- */
+.textbtn { font: inherit; font-weight: 600; text-decoration: underline; background: none; border: 0; padding: 0; cursor: pointer; }
+.sharebox {
+  padding: 0; border: 1.5px solid var(--ink); background: var(--paper); color: var(--ink);
+  width: min(92vw, 520px); max-height: 94vh; overflow: auto; overscroll-behavior: contain;
+}
+.sharebox::backdrop { background: rgba(28, 42, 45, 0.65); }
+body:has(dialog[open]) { overflow: hidden; }
+.sharebox__inner { padding: 18px; display: grid; gap: 14px; }
+.sharebox__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sharebox__title { font-size: 1.3rem; }
+.sharebox__x {
+  width: 40px; height: 40px; border: 0; background: transparent; color: var(--ink);
+  font-size: 1.8rem; line-height: 1; cursor: pointer; border-radius: 6px;
+}
+.sharebox__x:hover { background: #dce1d9; }
+.sharebox__stage { display: grid; place-items: center; min-height: 160px; background: var(--ink); padding: 10px; }
+.sharebox__stage .muted, .sharebox__stage .error { color: var(--granite); text-align: center; padding: 24px 8px; margin: 0; }
+.sharebox__img { display: block; width: auto; max-width: 100%; max-height: 58vh; height: auto; }
+.sharebox__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.sharebox__hint, .sharebox__note { margin: 0; font-size: 0.95rem; }
+.sharebox__note { font-weight: 600; }
 
 /* ---------- Buttons ---------- */
 .btn, .linkbtn {
