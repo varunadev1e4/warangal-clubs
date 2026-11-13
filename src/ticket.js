@@ -78,18 +78,6 @@ function wrap(ctx, text, maxWidth, maxLines) {
   return { lines, truncated }
 }
 
-// Loads an image for the canvas. Resolves null on any problem, so a bad poster never blocks sharing.
-function loadImage(url) {
-  return new Promise(resolve => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous' // needed so the canvas can still be exported
-    const timer = setTimeout(() => resolve(null), 8000)
-    img.onload = () => { clearTimeout(timer); resolve(img) }
-    img.onerror = () => { clearTimeout(timer); resolve(null) }
-    img.src = url
-  })
-}
-
 async function loadFonts(text) {
   if (!document.fonts || !document.fonts.load) return
   try {
@@ -212,7 +200,6 @@ export async function renderTicket(event, siteUrl) {
   const where = (event.location || '').trim()
 
   await loadFonts([event.title, where, host, 'Warangal Clubs'].join(' ') + ' 0123456789 AaPpMm')
-  const poster = event.poster_url ? await loadImage(event.poster_url) : null
 
   const canvas = document.createElement('canvas')
   canvas.width = TICKET_W
@@ -242,28 +229,7 @@ export async function renderTicket(event, siteUrl) {
   // hero
   ctx.fillStyle = STONE
   ctx.fillRect(tx, ty, tw, heroH)
-  if (poster) {
-    const pad = 26
-    const bw = tw - pad * 2
-    const bh = heroH - pad * 2
-    const s = Math.min(bw / poster.width, bh / poster.height)
-    const dw = poster.width * s
-    const dh = poster.height * s
-    const dx = tx + (tw - dw) / 2
-    const dy = ty + (heroH - dh) / 2
-    ctx.shadowColor = 'rgba(28, 42, 45, 0.35)'
-    ctx.shadowBlur = 24
-    ctx.shadowOffsetY = 8
-    ctx.fillStyle = '#FFFFFF'
-    ctx.fillRect(dx, dy, dw, dh)
-    ctx.shadowColor = 'transparent'
-    ctx.drawImage(poster, dx, dy, dw, dh)
-    ctx.strokeStyle = INK
-    ctx.lineWidth = 4
-    ctx.strokeRect(dx, dy, dw, dh)
-  } else {
-    drawGateway(ctx, tx + tw / 2, ty + 36, heroH - 72, accent, event.clubs ? initials(event.clubs.name) : '')
-  }
+  drawGateway(ctx, tx + tw / 2, ty + 36, heroH - 72, accent, event.clubs ? initials(event.clubs.name) : '')
   // coloured edge under the hero
   ctx.fillStyle = accent
   ctx.fillRect(tx, ty + heroH, tw, 14)
@@ -391,14 +357,13 @@ export async function renderTicket(event, siteUrl) {
 
   // ---- stub ----
   const stubTop = perfY
-  const stubH = ty + th - perfY
-  const qrSize = 176
+  const qrSize = 160
   const qrX = tx + tw - padX - qrSize
-  const qrY = stubTop + (stubH - qrSize) / 2
+  const qrY = stubTop + 26
   drawQr(ctx, siteUrl, qrX, qrY, qrSize)
 
   const markS = 52
-  const mid = stubTop + stubH / 2
+  const mid = qrY + qrSize / 2
   drawMark(ctx, tx + padX, mid - 62, markS)
   ctx.fillStyle = INK
   wide(ctx, true)
@@ -413,6 +378,17 @@ export async function renderTicket(event, siteUrl) {
   let shownHost = siteUrl
   try { shownHost = new URL(siteUrl).host } catch { /* keep as is */ }
   ctx.fillText(shownHost, tx + padX, mid + 72)
+
+  // small print along the bottom edge (shrinks a little if it would not fit on one line)
+  const terms = '*Terms and conditions apply. Entry only with a confirmation message from the team.'
+  let termsSize = 24
+  ctx.font = font(500, termsSize)
+  while (termsSize > 18 && ctx.measureText(terms).width > tw - padX * 2) {
+    termsSize -= 1
+    ctx.font = font(500, termsSize)
+  }
+  ctx.fillStyle = SOFT
+  ctx.fillText(terms, tx + padX, ty + th - 26)
 
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
   if (!blob) throw new Error("The ticket image couldn't be made in this browser.")
